@@ -69,6 +69,29 @@ Formatting rules you ALWAYS follow:
 
 Be concise. Prefer short sentences. Never pad with filler.`;
 
+// ── Personalities (Grok-style presets) ──────────────────────
+// Each is a system-prompt persona. "default" uses the user's own prompt.
+const PERSONAS = [
+  { id: 'default',    label: '✦ Default',           prompt: null },
+  { id: 'therapist',  label: '🛋️ Therapist',        prompt: `You are Ember in Therapist mode: a warm, empathetic, non-judgmental listener. Reflect the user's feelings back to them, ask gentle open-ended questions, and validate emotions before offering perspective. Don't rush to fix things. Keep a calm, human tone. You are not a replacement for a licensed professional, and if someone is in crisis, gently encourage real help.` },
+  { id: 'doctor',     label: '🩺 Doctor',            prompt: `You are Ember in Doctor mode: a clear, knowledgeable medical explainer. Explain symptoms, conditions, medications, and treatments in plain language with accurate, up-to-date information. Be direct and practical. For anything that needs diagnosis, prescriptions, or could be an emergency, tell the user to see a real clinician.` },
+  { id: 'professor',  label: '🎓 Professor',         prompt: `You are Ember in Professor mode: an erudite, patient academic. Give thorough, well-structured explanations with context, history, examples, and nuance. Show your reasoning. Use headers, lists, and the occasional analogy to make complex ideas click.` },
+  { id: 'romantic',   label: '🌹 Romantic',          prompt: `You are Ember in Romantic mode: a charming, affectionate, poetic companion. Be warm, playful, and tender, with expressive language and sweet compliments. Keep it tasteful and PG-13.` },
+  { id: 'comedian',   label: '🎤 Comedian',          prompt: `You are Ember in Comedian mode: a witty, irreverent stand-up comic. Answer with jokes, wordplay, and great comic timing while still being genuinely helpful underneath the bit. Keep it clever, not mean.` },
+  { id: 'coach',      label: '💪 Coach',             prompt: `You are Ember in Coach mode: a high-energy, motivational coach. Be direct, encouraging, and action-oriented. Break goals into concrete steps, hold the user accountable, and hype them up. No fluff — momentum.` },
+  { id: 'chef',       label: '👨‍🍳 Chef',             prompt: `You are Ember in Chef mode: a passionate culinary expert. Share recipes, techniques, flavor pairings, and plating tips with enthusiasm and precision. Offer substitutions and scaling. Make the user excited to cook.` },
+  { id: 'conspiracy', label: '🛸 Conspiracy Theorist', prompt: `You are Ember in Conspiracy Theorist mode: a wildly entertaining character who sees hidden patterns everywhere and dramatically connects unlikely dots ("wake up — it's all connected!"). This is theatrical roleplay for fun. Lean into the bit with humor and flair, but keep it as entertainment — don't present genuinely harmful real-world misinformation (medical, election, etc.) as actual fact.` },
+];
+const PERSONAS_MAP = Object.fromEntries(PERSONAS.map(p => [p.id, p]));
+
+// "How hard the AI works" — maps an effort level to generation params.
+function effortParams () {
+  const e = getSetting('effort', 'balanced');
+  if (e === 'fast') return { temperature: 0.3, max_tokens: 1024 };
+  if (e === 'max')  return { temperature: 0.9, max_tokens: 4096 };
+  return { temperature: getSetting('temperature', 0.7), max_tokens: getSetting('maxTokens', 2048) };
+}
+
 // ── State ──────────────────────────────────────────────────
 
 let conversations      = [];
@@ -237,6 +260,19 @@ function renderUsage () {
       <div class="usage-bar"><div class="usage-bar-fill ${fill}" style="width:${pct}%"></div></div>`;
     body.appendChild(row);
   }
+  updateUsagePill();
+}
+
+function updateUsagePill () {
+  const pill = document.getElementById('usage-pill');
+  if (!pill) return;
+  const p    = providerOf(getSetting('model', DEFAULT_MODEL));
+  const meta = PROVIDER_META[p];
+  const used = getUsage().counts[p] || 0;
+  const pct  = used / meta.limit;
+  const dot  = pct >= 1 ? '🔴' : pct >= 0.8 ? '🟠' : '🟢';
+  pill.textContent = `${dot} ${used}/${meta.limit}`;
+  pill.title = `${meta.name}: ${used} of ~${meta.limit} free requests used today`;
 }
 
 // ── GitHub profile ──────────────────────────────────────────
@@ -585,6 +621,21 @@ function appendMsg (role, content, streaming) {
   }
 
   wrap.append(lbl, bubble);
+
+  // Hover action bar for AI messages (Copy + Regenerate), like Claude
+  if (role !== 'user') {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    actions.innerHTML = `
+      <button class="msg-action" data-act="copy" title="Copy message" aria-label="Copy message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
+      <button class="msg-action" data-act="regen" title="Regenerate response" aria-label="Regenerate response">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>`;
+    wrap.appendChild(actions);
+  }
+
   feed.appendChild(wrap);
 
   if (!streaming) scrollBottom(false);
@@ -658,16 +709,20 @@ async function sendMessage (text) {
   setStreaming(true);
   streamBuf = '';
 
-  // Build request body
+  // Build request body — persona overrides the base prompt; effort sets params
+  const persona   = PERSONAS_MAP[getSetting('personality', 'default')];
+  const sysPrompt = (persona && persona.prompt) ? persona.prompt : getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT);
+  const eff       = effortParams();
+
   const payload = {
-    model:      model,
-    messages:   [
-      { role: 'system', content: getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT) },
+    model:       model,
+    messages:    [
+      { role: 'system', content: sysPrompt },
       ...conv.messages,
     ],
-    stream:     true,
-    temperature: getSetting('temperature', 0.7),
-    max_tokens:  getSetting('maxTokens',   2048),
+    stream:      true,
+    temperature: eff.temperature,
+    max_tokens:  eff.max_tokens,
   };
 
   // Slow-thinking notice
@@ -828,7 +883,7 @@ function showError (bubble, msg, canRetry) {
   if (!bubble) return;
   bubble.innerHTML = `<div class="error-card">
     ${esc(msg)}
-    ${canRetry ? '<br><button class="retry-btn" onclick="retryLast()">Retry</button>' : ''}
+    ${canRetry ? '<br><button class="retry-btn" data-act="retry" type="button">Retry</button>' : ''}
   </div>`;
 }
 
@@ -1124,6 +1179,84 @@ function toast (msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
 }
 
+// ── Bottom toolbar (model / effort / persona / usage / voice) ──
+
+function flashAction (btn) {
+  btn.classList.add('done');
+  setTimeout(() => btn.classList.remove('done'), 1500);
+}
+
+function setModel (value) {
+  setSetting('model', value);
+  const a = document.getElementById('model-select');
+  const b = document.getElementById('model-quick');
+  if (a) a.value = value;
+  if (b) b.value = value;
+  renderUsage();
+}
+
+function setupToolbar () {
+  // Personas
+  const persona = document.getElementById('persona-select');
+  persona.innerHTML = PERSONAS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
+  persona.value = getSetting('personality', 'default');
+  persona.addEventListener('change', () => {
+    setSetting('personality', persona.value);
+    const p = PERSONAS_MAP[persona.value];
+    toast(persona.value === 'default' ? 'Using your custom prompt.' : `Personality: ${p.label.replace(/^\S+\s/, '')}`);
+  });
+
+  // Model quick-switch (mirrors the Settings dropdown)
+  const quick = document.getElementById('model-quick');
+  quick.innerHTML = document.getElementById('model-select').innerHTML;
+  quick.value = getSetting('model', DEFAULT_MODEL);
+  quick.addEventListener('change', () => setModel(quick.value));
+
+  // Effort
+  const effort = document.getElementById('effort-select');
+  effort.value = getSetting('effort', 'balanced');
+  effort.addEventListener('change', () => setSetting('effort', effort.value));
+
+  updateUsagePill();
+}
+
+function initVoice () {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = document.getElementById('mic-btn');
+  if (!SR) { micBtn.style.display = 'none'; return; } // unsupported browser
+
+  const rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = 'en-US';
+  let listening = false;
+  let baseText  = '';
+
+  rec.onresult = e => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t; else interim += t;
+    }
+    if (final) baseText += final;
+    const inp = document.getElementById('message-input');
+    inp.value = (baseText + interim).replace(/\s+/g, ' ').trimStart();
+    autoResize(inp);
+    updateSendBtn();
+  };
+  const stop = () => { listening = false; micBtn.classList.remove('listening'); };
+  rec.onend = stop;
+  rec.onerror = ev => { if (ev.error === 'not-allowed') toast('Microphone permission denied.'); stop(); };
+
+  micBtn.addEventListener('click', () => {
+    if (listening) { rec.stop(); return; }
+    baseText = document.getElementById('message-input').value;
+    if (baseText && !baseText.endsWith(' ')) baseText += ' ';
+    try { rec.start(); listening = true; micBtn.classList.add('listening'); }
+    catch { /* already started */ }
+  });
+}
+
 // ── Send handler ────────────────────────────────────────────
 
 function handleSend () {
@@ -1234,8 +1367,12 @@ function init () {
   ['worker-url', 'model-select', 'sys-prompt'].forEach(id => {
     document.getElementById(id).addEventListener('change', saveSettingsFromUI);
   });
-  // Model change also updates which provider is highlighted as "active" in usage
-  document.getElementById('model-select').addEventListener('change', renderUsage);
+  // Model change also updates the quick-switcher + usage highlight
+  document.getElementById('model-select').addEventListener('change', () => {
+    const q = document.getElementById('model-quick');
+    if (q) q.value = document.getElementById('model-select').value;
+    renderUsage();
+  });
 
   // Sliders — live display + save on change
   document.getElementById('temp-slider').addEventListener('input', e => {
@@ -1313,6 +1450,23 @@ function init () {
 
   // ── Scroll button ──
   setupScrollBtn();
+
+  // ── Bottom toolbar + voice ──
+  setupToolbar();
+  initVoice();
+
+  // ── Message hover actions (Copy / Regenerate) + error Retry ──
+  document.getElementById('message-feed').addEventListener('click', e => {
+    const act = e.target.closest('.msg-action, .retry-btn');
+    if (!act) return;
+    const kind = act.dataset.act;
+    if (kind === 'copy') {
+      const bub = act.closest('.message')?.querySelector('.msg-bubble');
+      if (bub) { navigator.clipboard.writeText(bub.innerText.trim()); flashAction(act); }
+    } else if (kind === 'regen' || kind === 'retry') {
+      if (!isStreaming) retryLast();
+    }
+  });
 
   // ── Usage popover ──
   const usageBtn = document.getElementById('usage-btn');

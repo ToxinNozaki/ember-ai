@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Basic hardening: restrict where scripts, styles, images and network calls can come from -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.githubusercontent.com; connect-src 'self' https://*.workers.dev https://api.github.com http://localhost:* http://127.0.0.1:*; base-uri 'self'; form-action 'self';" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>Ember AI</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 5C50 5 25 30 25 55C25 70.5 37.5 82 53 82C68.5 82 80 70.5 80 55C80 42 70 34 70 34C70 34 65 48 55 48C45 48 50 34 50 34C50 34 40 44 40 57C40 62.5 42.5 67.5 46.5 70.5C43 68 41 63.5 41 58.8C41 51.7 45 45.8 50 42V5Z' fill='%23c96442'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -147,6 +150,29 @@
           </svg>
         </button>
       </div>
+
+      <!-- Bottom toolbar — voice, personality, model, effort, usage -->
+      <div class="input-toolbar">
+        <div class="toolbar-left">
+          <button id="mic-btn" class="toolbar-btn" aria-label="Voice to text" title="Voice input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <select id="persona-select" class="toolbar-select" aria-label="Personality" title="Personality"></select>
+        </div>
+        <div class="toolbar-right">
+          <select id="model-quick" class="toolbar-select" aria-label="Model" title="Model"></select>
+          <select id="effort-select" class="toolbar-select" aria-label="Effort" title="How hard the AI works">
+            <option value="fast">⚡ Fast</option>
+            <option value="balanced">◐ Balanced</option>
+            <option value="max">★ Max</option>
+          </select>
+          <span id="usage-pill" class="usage-pill" aria-label="Today's usage"></span>
+        </div>
+      </div>
+
       <div id="stop-wrapper" class="stop-wrapper">
         <button id="stop-btn" class="stop-btn" aria-label="Stop generating">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
