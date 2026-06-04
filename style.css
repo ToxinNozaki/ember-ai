@@ -76,6 +76,58 @@ textarea { resize: none; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ============================================================
+   PASSPHRASE GATE
+   ============================================================ */
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+.gate.hidden { display: none; }
+.gate-box {
+  width: 90%;
+  max-width: 320px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 13px;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+.gate-logo { width: 52px; height: 52px; color: var(--accent); }
+.gate-box h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+.gate-box p { font-size: 14px; color: var(--text-secondary); margin-bottom: 4px; }
+.gate-box input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  font-size: 15px;
+  outline: none;
+  text-align: center;
+  transition: border-color var(--transition);
+}
+.gate-box input:focus { border-color: var(--accent); }
+.btn-accent {
+  width: 100%;
+  padding: 11px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background var(--transition);
+}
+.btn-accent:hover { background: var(--accent-hover); }
+.gate-error { font-size: 13px; color: #e0574a; min-height: 16px; }
+
+/* ============================================================
    SIDEBAR
    ============================================================ */
 .sidebar {

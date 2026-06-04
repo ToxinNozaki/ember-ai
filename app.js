@@ -15,6 +15,8 @@ const DEFAULT_MODEL = 'gemini:gemini-2.5-flash';
 // Users can still override it in Settings.
 const DEFAULT_WORKER_URL = 'https://ember-ai-proxy.voxbot.workers.dev';
 const MAX_IMAGE_DIM = 1280; // downscale attached images to this max edge (speed + storage)
+const REQUIRE_PASSPHRASE = true;       // show a lock screen until the passphrase is verified
+const PASS_KEY = 'ember_passphrase';
 
 // Provider display names + approximate free daily request limits (for the local
 // usage estimate — providers don't expose live quota, so this counts requests
@@ -752,13 +754,19 @@ async function sendMessage (text) {
   try {
     const resp = await fetch(workerUrl, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body:    JSON.stringify(payload),
       signal:  abortCtrl.signal,
     });
 
-    // Count this request against the active provider's daily quota estimate
-    bumpUsage(providerOf(payload.model));
+    // Locked — passphrase missing or wrong
+    if (resp.status === 401) {
+      localStorage.removeItem(PASS_KEY);
+      persistConversations(); // keep the user message
+      showError(streamBubble, 'Locked — enter the passphrase to continue.', false);
+      showGate('Enter the passphrase to continue.');
+      return;
+    }
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
@@ -771,6 +779,9 @@ async function sendMessage (text) {
       persistConversations(); // keep the user message so Retry works
       return;
     }
+
+    // Count this request against the active provider's daily quota estimate
+    bumpUsage(providerOf(payload.model));
 
     const reader  = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -930,6 +941,58 @@ function promptWorkerUrl () {
   }, 150);
 }
 
+// ── Passphrase gate ─────────────────────────────────────────
+
+function authHeaders () {
+  const h = { 'Content-Type': 'application/json' };
+  const p = localStorage.getItem(PASS_KEY);
+  if (p) h['X-Ember-Passphrase'] = p;
+  return h;
+}
+
+// Returns: true (accepted), false (401 wrong), 'unknown' (worker reachable but
+// doesn't gate / pre-gate worker), or null (network failure).
+async function pingAuth (pass) {
+  const url = getSetting('workerUrl', DEFAULT_WORKER_URL);
+  try {
+    const r = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', ...(pass ? { 'X-Ember-Passphrase': pass } : {}) },
+      body:    JSON.stringify({ ping: true }),
+    });
+    if (r.status === 401) return false;
+    if (r.ok) return true;
+    return 'unknown';
+  } catch { return null; }
+}
+
+function showGate (msg) {
+  const g = document.getElementById('gate');
+  g.classList.remove('hidden');
+  document.getElementById('gate-error').textContent = msg || '';
+  setTimeout(() => document.getElementById('gate-input')?.focus(), 50);
+}
+
+function hideGate () { document.getElementById('gate').classList.add('hidden'); }
+
+async function submitGate () {
+  const input = document.getElementById('gate-input');
+  const err   = document.getElementById('gate-error');
+  const pass  = input.value;
+  if (!pass) { err.textContent = 'Enter the passphrase.'; return; }
+
+  err.textContent = 'Checking…';
+  const ok = await pingAuth(pass);
+  if (ok === false) { err.textContent = 'Wrong passphrase. Try again.'; return; }
+  if (ok === null)  { err.textContent = 'Could not reach the server. Check your connection.'; return; }
+
+  // true or 'unknown' → accept (server enforces the real check on each request)
+  localStorage.setItem(PASS_KEY, pass);
+  hideGate();
+  input.value = '';
+  err.textContent = '';
+}
+
 // ── Input helpers ───────────────────────────────────────────
 
 function autoResize (el) {
@@ -1017,7 +1080,7 @@ async function testConnection () {
   try {
     const r = await fetch(url, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body:    JSON.stringify({
         model:      document.getElementById('model-select').value || DEFAULT_MODEL,
         messages:   [{ role: 'user', content: 'Hi' }],
@@ -1028,9 +1091,14 @@ async function testConnection () {
     if (r.ok) {
       status.textContent = '✓ Connected successfully!';
       status.className   = 'conn-status ok';
+    } else if (r.status === 401) {
+      status.textContent = '✗ Passphrase required or incorrect (unlock the site first).';
+      status.className   = 'conn-status err';
     } else {
       const t = await r.text().catch(() => '');
-      status.textContent = `✗ Error ${r.status}: ${t || 'check Worker logs'}`;
+      let detail = t;
+      try { detail = JSON.parse(t)?.error?.message || t; } catch {}
+      status.textContent = `✗ Error ${r.status}: ${detail || 'check Worker logs'}`;
       status.className   = 'conn-status err';
     }
   } catch (e) {
@@ -1295,6 +1363,13 @@ function setupScrollBtn () {
 
 function init () {
   loadConversations();
+
+  // ── Passphrase gate ──
+  if (REQUIRE_PASSPHRASE && !localStorage.getItem(PASS_KEY)) showGate(); else hideGate();
+  document.getElementById('gate-submit').addEventListener('click', submitGate);
+  document.getElementById('gate-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); submitGate(); }
+  });
 
   // Migrate any pre-existing bare model id (e.g. "gemini-2.5-flash") to the
   // new "provider:model" format so routing + usage work.

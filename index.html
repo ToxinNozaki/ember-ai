@@ -17,6 +17,22 @@
 <body data-theme="dark">
 
   <!-- ═══════════════════════════════════════════
+       PASSPHRASE GATE
+  ═══════════════════════════════════════════ -->
+  <div id="gate" class="gate hidden" role="dialog" aria-modal="true" aria-label="Enter passphrase">
+    <div class="gate-box">
+      <svg class="gate-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 2C12 2 7 7 7 13C7 16.31 9.69 19 13 19C16.31 19 19 16.31 19 13C19 10 17 8 17 8C17 8 16 11 14 11C12 11 12 8 12 8C12 8 10 10 10 13C10 14.1 10.45 15.1 11.17 15.83C10.43 15.38 10 14.53 10 13.6C10 12.14 10.86 10.9 12 10.18V2Z" fill="currentColor"/>
+      </svg>
+      <h2>Ember AI</h2>
+      <p>Enter the passphrase to continue.</p>
+      <input type="password" id="gate-input" placeholder="Passphrase" autocomplete="off" />
+      <button id="gate-submit" class="btn-accent" type="button">Unlock</button>
+      <div id="gate-error" class="gate-error" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
        SIDEBAR
   ═══════════════════════════════════════════ -->
   <aside id="sidebar" class="sidebar" aria-label="Conversations sidebar">

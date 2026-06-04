@@ -49,6 +49,19 @@ export default {
       return new Response('Invalid JSON body', { status: 400 });
     }
 
+    // ── Passphrase gate (only enforced when the EMBER_PASSPHRASE secret is set) ──
+    if (env.EMBER_PASSPHRASE) {
+      const given = request.headers.get('X-Ember-Passphrase') || '';
+      if (given !== env.EMBER_PASSPHRASE) {
+        return json({ error: { message: 'Invalid or missing passphrase.' } }, 401, origin);
+      }
+    }
+
+    // ── Lightweight auth/health check — validates passphrase without a model call ──
+    if (body.ping) {
+      return json({ ok: true }, 200, origin);
+    }
+
     // ── Resolve provider from "provider:model" prefix ──
     const rawModel = String(body.model || '');
     const sep      = rawModel.indexOf(':');
@@ -129,7 +142,7 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin':  origin || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Ember-Passphrase',
     'Access-Control-Max-Age':       '86400',
   };
 }
