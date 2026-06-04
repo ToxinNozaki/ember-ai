@@ -52,6 +52,11 @@
       <div class="usage-pop-note">Estimated from this browser's requests · each provider has its own free quota.</div>
     </div>
 
+    <!-- Profile popover -->
+    <div id="profile-popover" class="usage-popover profile-popover" role="dialog" aria-label="Profile">
+      <div id="profile-pop-body" class="profile-pop-body"></div>
+    </div>
+
     <div class="sidebar-bottom">
       <button id="usage-btn" class="icon-btn" aria-label="Show daily usage">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -76,7 +81,7 @@
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
       </button>
-      <div class="user-avatar" role="button" tabindex="0" aria-label="User profile">U</div>
+      <div id="user-avatar" class="user-avatar" role="button" tabindex="0" aria-label="User profile">U</div>
     </div>
 
     <button id="sidebar-collapse" class="sidebar-collapse-btn" aria-label="Collapse sidebar">
@@ -236,6 +241,15 @@
               Max Tokens — <span id="tokens-value">2048</span>
             </label>
             <input type="range" id="tokens-slider" min="256" max="8192" step="256" value="2048" />
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Profile</h3>
+          <div class="form-group">
+            <label for="github-user">GitHub username</label>
+            <input type="text" id="github-user" placeholder="e.g. ToxinNozaki" autocomplete="off" />
+            <p class="field-hint">Shows your GitHub avatar + profile on the sidebar icon. Public info only — no login required.</p>
           </div>
         </section>
 

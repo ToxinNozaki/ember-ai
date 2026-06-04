@@ -239,6 +239,59 @@ function renderUsage () {
   }
 }
 
+// ── GitHub profile ──────────────────────────────────────────
+
+async function loadGithubProfile (force) {
+  const user = String(getSetting('githubUser', '') || '').trim();
+  if (!user) { setSetting('githubProfile', null); updateAvatar(); renderProfile(); return; }
+
+  const cached = getSetting('githubProfile', null);
+  if (!force && cached && cached.login && cached.login.toLowerCase() === user.toLowerCase()) {
+    updateAvatar(); renderProfile(); return;
+  }
+  try {
+    const r = await fetch(`https://api.github.com/users/${encodeURIComponent(user)}`);
+    if (!r.ok) throw new Error(r.status === 404 ? 'username not found' : `error ${r.status}`);
+    const d = await r.json();
+    setSetting('githubProfile', {
+      login: d.login, name: d.name || d.login, avatar_url: d.avatar_url, html_url: d.html_url,
+    });
+    updateAvatar(); renderProfile();
+    if (force) toast('GitHub profile linked.');
+  } catch (e) {
+    toast('GitHub: ' + e.message);
+  }
+}
+
+function updateAvatar () {
+  const el = document.getElementById('user-avatar');
+  if (!el) return;
+  const prof = getSetting('githubProfile', null);
+  if (prof && prof.avatar_url) {
+    el.innerHTML = `<img src="${prof.avatar_url}" alt="${esc(prof.login)}">`;
+    el.classList.add('has-img');
+    el.setAttribute('aria-label', `GitHub: ${prof.login}`);
+  } else {
+    el.textContent = 'U';
+    el.classList.remove('has-img');
+    el.setAttribute('aria-label', 'User profile');
+  }
+}
+
+function renderProfile () {
+  const body = document.getElementById('profile-pop-body');
+  if (!body) return;
+  const prof = getSetting('githubProfile', null);
+  if (!prof) {
+    body.innerHTML = `<div class="profile-empty">Add your GitHub username in <strong>Settings</strong> to show your profile here.</div>`;
+    return;
+  }
+  body.innerHTML = `
+    <img class="profile-avatar" src="${prof.avatar_url}" alt="${esc(prof.login)}">
+    <div class="profile-name">${esc(prof.name)}</div>
+    <a class="profile-link" href="${prof.html_url}" target="_blank" rel="noopener noreferrer">@${esc(prof.login)} ↗</a>`;
+}
+
 // ── Sidebar rendering ───────────────────────────────────────
 
 function renderSidebar (filter = '') {
@@ -642,12 +695,13 @@ async function sendMessage (text) {
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
+      let detail = txt;
+      try { detail = JSON.parse(txt)?.error?.message || txt; } catch {}
       const msg = resp.status === 429
-        ? 'The model is rate-limited right now. Please wait a moment and try again.'
-        : `API error ${resp.status}: ${txt || 'Unknown error'}`;
-      showError(streamBubble, msg, false);
-      conv.messages.pop();
-      persistConversations();
+        ? 'The model is rate-limited right now. Wait a moment and retry, or switch models in Settings.'
+        : `API error ${resp.status}: ${detail || 'Unknown error'}`;
+      showError(streamBubble, msg, true);
+      persistConversations(); // keep the user message so Retry works
       return;
     }
 
@@ -688,6 +742,14 @@ async function sendMessage (text) {
     // Final render (no cursor)
     clearTimeout(renderTimer);
     renderTimer = null;
+
+    if (!streamBuf.trim()) {
+      // Model returned nothing usable — offer retry instead of an empty bubble
+      showError(streamBubble, 'The model returned an empty response. Retry, or switch models in Settings.', true);
+      persistConversations(); // keep the user message for retry
+      return;
+    }
+
     if (streamBubble) streamBubble.innerHTML = renderMd(streamBuf);
 
     // Persist
@@ -779,13 +841,16 @@ function retryLast () {
   while (idx >= 0 && conv.messages[idx].role !== 'user') idx--;
   if (idx < 0) return;
 
-  const userContent = conv.messages[idx].content;
+  const last = conv.messages[idx].content;
+  const text = messageText(last);
+  const imgs = messageImages(last);
   conv.messages = conv.messages.slice(0, idx);
   persistConversations();
 
-  // Re-render without failed messages
+  // Re-render without the failed exchange, then resend (re-attaching any images)
   renderMessages(conv);
-  sendMessage(userContent);
+  if (imgs.length) { pendingImages = imgs.slice(); renderImagePreview(); }
+  sendMessage(text);
 }
 
 function promptWorkerUrl () {
@@ -845,6 +910,7 @@ function closeSettings () {
 function syncSettingsToUI () {
   const s = getSettings();
   document.getElementById('worker-url').value  = s.workerUrl  || DEFAULT_WORKER_URL;
+  document.getElementById('github-user').value = s.githubUser || '';
   document.getElementById('model-select').value = s.model     || DEFAULT_MODEL;
   document.getElementById('sys-prompt').value   = s.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 
@@ -861,6 +927,7 @@ function syncSettingsToUI () {
 
 function saveSettingsFromUI () {
   setSetting('workerUrl',    document.getElementById('worker-url').value.trim());
+  setSetting('githubUser',   document.getElementById('github-user').value.trim());
   setSetting('model',        document.getElementById('model-select').value);
   setSetting('systemPrompt', document.getElementById('sys-prompt').value);
   setSetting('temperature',  parseFloat(document.getElementById('temp-slider').value));
@@ -1252,6 +1319,7 @@ function init () {
   const usagePop = document.getElementById('usage-popover');
   usageBtn.addEventListener('click', e => {
     e.stopPropagation();
+    profilePop.classList.remove('open');
     const open = usagePop.classList.toggle('open');
     if (open) renderUsage();
   });
@@ -1263,12 +1331,38 @@ function init () {
   });
   renderUsage();
 
+  // ── Profile avatar popover ──
+  const avatar     = document.getElementById('user-avatar');
+  const profilePop = document.getElementById('profile-popover');
+  const toggleProfile = e => {
+    e.stopPropagation();
+    usagePop.classList.remove('open');
+    const open = profilePop.classList.toggle('open');
+    if (open) renderProfile();
+  };
+  avatar.addEventListener('click', toggleProfile);
+  avatar.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProfile(e); }
+  });
+  document.addEventListener('click', e => {
+    if (profilePop.classList.contains('open') &&
+        !profilePop.contains(e.target) && !avatar.contains(e.target)) {
+      profilePop.classList.remove('open');
+    }
+  });
+  document.getElementById('github-user').addEventListener('change', () => {
+    saveSettingsFromUI();
+    loadGithubProfile(true);
+  });
+  loadGithubProfile();
+
   // ── Keyboard shortcuts ──
   document.addEventListener('keydown', e => {
     const mod = e.metaKey || e.ctrlKey;
     if (e.key === 'Escape') {
       closeSettings(); closeConfirm(); closeMobileSidebar();
       usagePop.classList.remove('open');
+      profilePop.classList.remove('open');
     }
     if (mod && e.key === 'n') { e.preventDefault(); newChat(); }
     if (mod && e.key === 'k') { e.preventDefault(); document.getElementById('search-input').focus(); }
