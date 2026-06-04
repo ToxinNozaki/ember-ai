@@ -2,6 +2,20 @@ name            = "ember-ai-proxy"
 main            = "worker.js"
 compatibility_date = "2024-09-01"
 
-# Set the API key with:  wrangler secret put GEMINI_API_KEY
-# Get a free key (no credit card) at: https://aistudio.google.com/apikey
-# It is stored encrypted by Cloudflare — never appears in this file or Git.
+# ── Secrets (set once, stored encrypted, never in this file or Git) ──
+#   wrangler secret put GEMINI_API_KEY        (https://aistudio.google.com/apikey)
+#   wrangler secret put GROQ_API_KEY          (optional)
+#   wrangler secret put GITHUB_MODELS_TOKEN   (optional)
+#   wrangler secret put OPENROUTER_API_KEY    (optional)
+#   wrangler secret put EMBER_PASSPHRASE      (optional — enables the passphrase gate)
+
+# ── Image generation (Cloudflare Workers AI — free, no key) ──
+[ai]
+binding = "AI"
+
+# ── Rate limiting (optional). Create the namespace, then paste its id below:
+#     wrangler kv namespace create EMBER_RL
+#   Then uncomment and fill in the id. Without this, rate limiting is skipped.
+# [[kv_namespaces]]
+# binding = "RL"
+# id      = "PASTE_NAMESPACE_ID_HERE"

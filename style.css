@@ -1298,3 +1298,96 @@ textarea { resize: none; }
 @media (min-width: 769px) {
   .sidebar-open-btn { display: none !important; }
 }
+
+/* ============================================================
+   IMAGE GENERATION
+   ============================================================ */
+.toolbar-btn.active { background: var(--accent); color: #fff; }
+.toolbar-btn.active:hover { background: var(--accent-hover); color: #fff; }
+
+.gen-image {
+  max-width: 420px;
+  width: 100%;
+  border-radius: 12px;
+  display: block;
+  border: 1px solid var(--border);
+  animation: imgReveal 0.5s ease;
+}
+@keyframes imgReveal {
+  from { opacity: 0; transform: scale(0.96); filter: blur(8px); }
+  to   { opacity: 1; transform: scale(1);   filter: blur(0); }
+}
+.msg-bubble > div img, .msg-bubble p img { max-width: 100%; border-radius: 10px; }
+
+/* ============================================================
+   ANIMATIONS & POLISH
+   ============================================================ */
+
+/* Consistent easing on interactive elements */
+button, .conv-item, .suggestion-card, .toolbar-select, .icon-btn, .user-avatar {
+  transition: background-color var(--transition), border-color var(--transition),
+              color var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+/* Micro press feedback */
+button:active { transform: scale(0.96); }
+.send-btn:active:not(:disabled), .btn-accent:active { transform: scale(0.94); }
+
+/* Logo gradient shimmer */
+.logo-text {
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover), var(--accent));
+  background-size: 200% auto;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 6s linear infinite;
+}
+@keyframes shimmer { to { background-position: 200% center; } }
+
+/* Region fade on load */
+.chat-header, .input-area { animation: fadeIn 0.4s ease; }
+
+/* Staggered welcome cards */
+.suggestion-card { opacity: 0; animation: cardUp 0.45s ease forwards; }
+.suggestion-card:nth-child(1) { animation-delay: 0.05s; }
+.suggestion-card:nth-child(2) { animation-delay: 0.12s; }
+.suggestion-card:nth-child(3) { animation-delay: 0.19s; }
+.suggestion-card:nth-child(4) { animation-delay: 0.26s; }
+@keyframes cardUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.suggestion-card:hover { transform: translateY(-3px); box-shadow: 0 8px 22px var(--shadow); }
+
+/* Staggered sidebar items */
+.conv-item:nth-child(1) { animation-delay: 0.02s; }
+.conv-item:nth-child(2) { animation-delay: 0.05s; }
+.conv-item:nth-child(3) { animation-delay: 0.08s; }
+.conv-item:nth-child(4) { animation-delay: 0.11s; }
+.conv-item:nth-child(5) { animation-delay: 0.14s; }
+
+/* Refined message entrance */
+.message { animation: msgRise 0.3s cubic-bezier(.22,1,.36,1); }
+@keyframes msgRise { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* Input focus glow */
+.input-wrapper:focus-within { box-shadow: 0 0 0 3px var(--accent-subtle); }
+
+/* New-chat button sheen */
+.new-chat-btn { position: relative; overflow: hidden; }
+.new-chat-btn::after {
+  content: ''; position: absolute; top: 0; left: -130%;
+  width: 80%; height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,0.13), transparent);
+  transition: left 0.6s ease;
+}
+.new-chat-btn:hover::after { left: 140%; }
+
+/* Gate logo float */
+.gate-logo { animation: floaty 4s ease-in-out infinite; }
+@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

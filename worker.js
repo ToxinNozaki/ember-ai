@@ -62,6 +62,27 @@ export default {
       return json({ ok: true }, 200, origin);
     }
 
+    // ── Rate limiting (only active when the RL KV namespace is bound) ──
+    const limited = await checkRateLimit(env, request, origin);
+    if (limited) return limited;
+
+    // ── Image generation via Cloudflare Workers AI (FLUX.1-schnell, free) ──
+    if (body.generate_image) {
+      if (!env.AI) {
+        return json({ error: { message: 'Image generation is not enabled. Add the [ai] binding to wrangler.toml and redeploy.' } }, 400, origin);
+      }
+      try {
+        const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+          prompt: String(body.prompt || '').slice(0, 2000),
+          steps:  6,
+        });
+        // FLUX returns { image: "<base64 jpeg>" }
+        return json({ image: out.image }, 200, origin);
+      } catch (e) {
+        return json({ error: { message: `Image generation failed: ${e.message}` } }, 502, origin);
+      }
+    }
+
     // ── Resolve provider from "provider:model" prefix ──
     const rawModel = String(body.model || '');
     const sep      = rawModel.indexOf(':');
@@ -82,6 +103,12 @@ export default {
     }
 
     body.model = modelId; // strip the provider prefix before forwarding
+
+    // ── Guard rails: clamp max_tokens + cap request size ──
+    if (typeof body.max_tokens === 'number') body.max_tokens = Math.min(Math.max(body.max_tokens, 1), 4096);
+    if (JSON.stringify(body.messages || '').length > 200000) {
+      return json({ error: { message: 'Request too large.' } }, 413, origin);
+    }
 
     // ── Forward to provider ──
     let upstream;
@@ -122,6 +149,21 @@ export default {
   },
 };
 
+// Per-IP daily rate limit. No-op unless the RL KV namespace is bound.
+async function checkRateLimit(env, request, origin) {
+  if (!env.RL) return null;
+  const LIMIT = 300;
+  const ip  = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `rl:${ip}:${day}`;
+  const cur = parseInt((await env.RL.get(key)) || '0', 10);
+  if (cur >= LIMIT) {
+    return json({ error: { message: 'Daily request limit reached for your connection. Try again tomorrow.' } }, 429, origin);
+  }
+  await env.RL.put(key, String(cur + 1), { expirationTtl: 90000 }); // ~25h
+  return null;
+}
+
 function isAllowed(origin) {
   // The Worker URL is public (shared with friends), so require a matching
   // browser Origin to reduce abuse of the shared API quota. Browsers always
@@ -144,5 +186,9 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Ember-Passphrase',
     'Access-Control-Max-Age':       '86400',
+    // Basic security headers on every response
+    'X-Content-Type-Options':       'nosniff',
+    'X-Frame-Options':              'DENY',
+    'Referrer-Policy':              'strict-origin-when-cross-origin',
   };
 }

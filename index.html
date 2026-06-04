@@ -170,6 +170,11 @@
       <!-- Bottom toolbar — voice, personality, model, effort, usage -->
       <div class="input-toolbar">
         <div class="toolbar-left">
+          <button id="image-mode-btn" class="toolbar-btn" aria-label="Image generation mode" aria-pressed="false" title="Generate an image">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
           <button id="mic-btn" class="toolbar-btn" aria-label="Voice to text" title="Voice input">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -332,6 +337,7 @@
   <!-- CDN dependencies -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

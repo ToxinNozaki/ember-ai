@@ -116,6 +116,7 @@ let streamBuf          = '';    // accumulated raw markdown during streaming
 let streamBubble       = null;  // the DOM element receiving streamed content
 let confirmCb          = null;  // callback for confirm modal
 let pendingImages      = [];    // data URLs of images attached to the next message
+let imageMode          = false; // when true, the input generates an image instead of chatting
 
 // ── Settings helpers ────────────────────────────────────────
 
@@ -483,7 +484,10 @@ function esc (str) {
 }
 
 function renderMd (text) {
-  const raw = marked.parse(text);
+  // Sanitize the AI's markdown→HTML before we touch it (XSS defense-in-depth).
+  // Our own trusted post-processing (code headers, table wraps) runs after.
+  let raw = marked.parse(text);
+  if (window.DOMPurify) raw = DOMPurify.sanitize(raw, { ADD_ATTR: ['target', 'rel'] });
 
   // Post-process in a detached div
   const wrap = document.createElement('div');
@@ -628,6 +632,15 @@ function appendMsg (role, content, streaming) {
   } else if (streaming) {
     bubble.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
     streamBubble = bubble;
+  } else if (messageImages(content).length) {
+    // Generated image(s) from an assistant message
+    messageImages(content).forEach(src => {
+      const im = document.createElement('img');
+      im.className = 'gen-image'; im.src = src; im.loading = 'lazy'; im.alt = 'generated image';
+      bubble.appendChild(im);
+    });
+    const t = messageText(content);
+    if (t) { const d = document.createElement('div'); d.innerHTML = renderMd(t); bubble.appendChild(d); }
   } else {
     bubble.innerHTML = renderMd(content);
   }
@@ -865,6 +878,84 @@ async function sendMessage (text) {
     setStreaming(false);
     streamBubble = null;
     streamBuf    = '';
+    scrollBottom();
+  }
+}
+
+async function generateImage (prompt) {
+  if (isStreaming) return;
+  prompt = (prompt || '').trim();
+  if (!prompt) return;
+
+  const workerUrl = getSetting('workerUrl', DEFAULT_WORKER_URL);
+  if (!workerUrl) { promptWorkerUrl(); return; }
+
+  if (!activeId) {
+    const c = makeConversation();
+    conversations.unshift(c);
+    activeId = c.id;
+  }
+  const conv = getActive();
+  if (!conv) return;
+
+  conv.messages.push({ role: 'user', content: prompt });
+  if (conv.messages.length === 1) { conv.title = autoTitle(prompt); setTitle(conv.title); }
+  conv.updatedAt = Date.now();
+  appendMsg('user', prompt, false);
+
+  const inp = document.getElementById('message-input');
+  inp.value = ''; autoResize(inp); updateSendBtn();
+
+  const bubble = appendMsg('assistant', '', true); // loading dots
+  setStreaming(true);
+  abortCtrl = new AbortController();
+
+  try {
+    const resp = await fetch(workerUrl, {
+      method:  'POST',
+      headers: authHeaders(),
+      body:    JSON.stringify({ generate_image: true, prompt }),
+      signal:  abortCtrl.signal,
+    });
+
+    if (resp.status === 401) {
+      localStorage.removeItem(PASS_KEY);
+      showError(bubble, 'Locked — enter the passphrase to continue.', false);
+      showGate('Enter the passphrase to continue.');
+      persistConversations();
+      return;
+    }
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => '');
+      let d = t; try { d = JSON.parse(t)?.error?.message || t; } catch {}
+      showError(bubble, `Image generation failed: ${d || 'try again'}`, true);
+      persistConversations();
+      return;
+    }
+
+    const data = await resp.json();
+    if (!data.image) { showError(bubble, 'No image returned. Try again.', true); persistConversations(); return; }
+
+    const dataURL = `data:image/jpeg;base64,${data.image}`;
+    bubble.innerHTML = '';
+    const im = document.createElement('img');
+    im.className = 'gen-image'; im.src = dataURL; im.alt = prompt; im.loading = 'lazy';
+    bubble.appendChild(im);
+
+    conv.messages.push({ role: 'assistant', content: [{ type: 'image_url', image_url: { url: dataURL } }] });
+    conv.updatedAt = Date.now();
+    persistConversations();
+    renderSidebar();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      document.querySelector('#message-feed .message:last-child')?.remove();
+    } else {
+      showError(bubble, 'Failed to reach the image generator. Try again.', true);
+    }
+    persistConversations();
+  } finally {
+    setStreaming(false);
+    streamBubble = null;
     scrollBottom();
   }
 }
@@ -1343,8 +1434,19 @@ function handleSend () {
   if (isStreaming) return;
   const inp = document.getElementById('message-input');
   const txt = inp.value.trim();
+  if (imageMode) { if (txt) generateImage(txt); return; }
   if (!txt && !pendingImages.length) return;
   sendMessage(txt);
+}
+
+function toggleImageMode () {
+  imageMode = !imageMode;
+  const btn = document.getElementById('image-mode-btn');
+  const inp = document.getElementById('message-input');
+  btn.classList.toggle('active', imageMode);
+  btn.setAttribute('aria-pressed', String(imageMode));
+  inp.placeholder = imageMode ? 'Describe an image to generate…' : 'Message Ember…';
+  if (imageMode) toast('🎨 Image mode — your next message generates a picture.');
 }
 
 // ── Scroll-to-bottom button ─────────────────────────────────
@@ -1541,6 +1643,7 @@ function init () {
   // ── Bottom toolbar + voice ──
   setupToolbar();
   initVoice();
+  document.getElementById('image-mode-btn').addEventListener('click', toggleImageMode);
 
   // ── Message hover actions (Copy / Regenerate) + error Retry ──
   document.getElementById('message-feed').addEventListener('click', e => {
