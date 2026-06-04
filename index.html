@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ember AI</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 5C50 5 25 30 25 55C25 70.5 37.5 82 53 82C68.5 82 80 70.5 80 55C80 42 70 34 70 34C70 34 65 48 55 48C45 48 50 34 50 34C50 34 40 44 40 57C40 62.5 42.5 67.5 46.5 70.5C43 68 41 63.5 41 58.8C41 51.7 45 45.8 50 42V5Z' fill='%23c96442'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" id="hljs-theme" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="dark">
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR
+  ═══════════════════════════════════════════ -->
+  <aside id="sidebar" class="sidebar" aria-label="Conversations sidebar">
+    <div class="sidebar-top">
+      <div class="app-logo">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M12 2C12 2 7 7 7 13C7 16.31 9.69 19 13 19C16.31 19 19 16.31 19 13C19 10 17 8 17 8C17 8 16 11 14 11C12 11 12 8 12 8C12 8 10 10 10 13C10 14.1 10.45 15.1 11.17 15.83C10.43 15.38 10 14.53 10 13.6C10 12.14 10.86 10.9 12 10.18V2Z" fill="currentColor"/>
+        </svg>
+        <span class="logo-text">Ember AI</span>
+      </div>
+
+      <button id="new-chat-btn" class="new-chat-btn" aria-label="Start new conversation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        New Chat
+      </button>
+
+      <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="search" id="search-input" class="search-input" placeholder="Search conversations…" aria-label="Search conversations" autocomplete="off" />
+      </div>
+    </div>
+
+    <div id="conversation-list" class="conversation-list" role="list" aria-label="Conversation history"></div>
+
+    <div class="sidebar-bottom">
+      <button id="settings-btn" class="icon-btn" aria-label="Open settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button id="theme-toggle" class="icon-btn" aria-label="Toggle dark/light mode">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <div class="user-avatar" role="button" tabindex="0" aria-label="User profile">U</div>
+    </div>
+
+    <button id="sidebar-collapse" class="sidebar-collapse-btn" aria-label="Collapse sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+  </aside>
+
+  <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+
+  <!-- ═══════════════════════════════════════════
+       MAIN CHAT AREA
+  ═══════════════════════════════════════════ -->
+  <main id="main" class="main">
+    <header class="chat-header">
+      <button id="sidebar-open" class="icon-btn sidebar-open-btn" aria-label="Open sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <h1 id="chat-title" class="chat-title" contenteditable="true" spellcheck="false" aria-label="Conversation title — click to edit">New Conversation</h1>
+      <div class="header-actions">
+        <button id="copy-convo-btn" class="icon-btn" aria-label="Copy conversation as Markdown">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="message-feed" class="message-feed" role="log" aria-live="polite" aria-label="Chat messages">
+      <!-- Welcome screen injected by JS -->
+    </div>
+
+    <button id="scroll-bottom-btn" class="scroll-bottom-btn" aria-label="Scroll to bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea
+          id="message-input"
+          class="message-input"
+          placeholder="Message Ember…"
+          rows="1"
+          aria-label="Type your message"
+        ></textarea>
+        <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      <div id="stop-wrapper" class="stop-wrapper">
+        <button id="stop-btn" class="stop-btn" aria-label="Stop generating">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="2"/>
+          </svg>
+          Stop generating
+        </button>
+      </div>
+      <p class="input-disclaimer">Ember can make mistakes. Verify important info.</p>
+    </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       SETTINGS PANEL
+  ═══════════════════════════════════════════ -->
+  <div id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="settings-backdrop" id="settings-backdrop"></div>
+    <div class="settings-drawer">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button id="settings-close" class="icon-btn" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="settings-body">
+        <section class="settings-section">
+          <h3>API Configuration</h3>
+          <div class="form-group">
+            <label for="worker-url">Cloudflare Worker URL</label>
+            <input type="url" id="worker-url" placeholder="https://ember-proxy.yourname.workers.dev" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <button id="test-conn-btn" class="btn btn-secondary">Test Connection</button>
+          </div>
+          <div id="conn-status" class="conn-status" aria-live="polite" role="status"></div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Model</h3>
+          <div class="form-group">
+            <label for="model-select">Active Model</label>
+            <select id="model-select">
+              <option value="deepseek-chat">deepseek-chat — DeepSeek V3 (balanced, fast)</option>
+              <option value="deepseek-reasoner">deepseek-reasoner — R1 (deep thinking, slower)</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>System Prompt</h3>
+          <div class="form-group">
+            <label for="sys-prompt">Customize AI personality</label>
+            <textarea id="sys-prompt" rows="9"></textarea>
+          </div>
+          <button id="reset-prompt-btn" class="btn btn-secondary">Reset to Default</button>
+        </section>
+
+        <section class="settings-section">
+          <h3>Generation</h3>
+          <div class="form-group">
+            <label for="temp-slider">
+              Creativity — <span id="temp-value">0.7</span>
+              <small>Low (focused) ←→ High (creative)</small>
+            </label>
+            <input type="range" id="temp-slider" min="0" max="1.5" step="0.1" value="0.7" />
+          </div>
+          <div class="form-group">
+            <label for="tokens-slider">
+              Max Tokens — <span id="tokens-value">2048</span>
+            </label>
+            <input type="range" id="tokens-slider" min="256" max="8192" step="256" value="2048" />
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Appearance</h3>
+          <div class="form-group theme-row">
+            <label>Theme</label>
+            <button id="settings-theme-btn" class="btn btn-secondary">Switch to Light Mode</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Data</h3>
+          <div class="btn-row">
+            <button id="export-btn" class="btn btn-secondary">Export JSON</button>
+            <button id="clear-all-btn" class="btn btn-danger">Clear All Conversations</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       CONFIRM MODAL
+  ═══════════════════════════════════════════ -->
+  <div id="confirm-modal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-box">
+      <h3 id="confirm-title">Are you sure?</h3>
+      <p id="confirm-msg"></p>
+      <div class="modal-actions">
+        <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-ok" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CDN dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
