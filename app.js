@@ -26,6 +26,16 @@ const PROVIDER_META = {
   openrouter: { name: 'OpenRouter',     limit: 200 },
 };
 
+// Always prepended to whatever prompt/persona is active, so Ember knows itself.
+const EMBER_IDENTITY =
+`About yourself (use this only when the user asks about Ember, who made it, the website, what model you are, etc. — otherwise don't bring it up):
+- You are Ember, the AI assistant inside "Ember AI", a free, open-source chat web app.
+- Ember AI was created by ToxinNozaki and is hosted at https://toxinnozaki.github.io/ember-ai/ (source code: https://github.com/ToxinNozaki/ember-ai).
+- The app is free and routes through several free AI providers (Google Gemini, Groq, GitHub Models, OpenRouter). The user picks which one, so your underlying model varies — if asked which model powers you and you don't know, say it depends on the model selected in the app.
+- Do NOT claim the Ember AI app was made by OpenAI, Meta, Google, Anthropic, etc. Those companies make the underlying language models; the Ember AI app itself was built by ToxinNozaki.
+- Conversations are stored only in the user's own browser (localStorage); nothing is saved on a server.
+Keep this brief and only mention it when relevant.`;
+
 const DEFAULT_SYSTEM_PROMPT =
 `You are Ember, a knowledgeable, thoughtful, and friendly AI assistant. You communicate clearly and precisely.
 
@@ -709,10 +719,12 @@ async function sendMessage (text) {
   setStreaming(true);
   streamBuf = '';
 
-  // Build request body — persona overrides the base prompt; effort sets params
-  const persona   = PERSONAS_MAP[getSetting('personality', 'default')];
-  const sysPrompt = (persona && persona.prompt) ? persona.prompt : getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT);
-  const eff       = effortParams();
+  // Build request body — persona overrides the base prompt; effort sets params.
+  // Ember's self-knowledge is prepended to every prompt so it knows what it is.
+  const persona    = PERSONAS_MAP[getSetting('personality', 'default')];
+  const basePrompt = (persona && persona.prompt) ? persona.prompt : getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT);
+  const sysPrompt  = EMBER_IDENTITY + '\n\n' + basePrompt;
+  const eff        = effortParams();
 
   const payload = {
     model:       model,
