@@ -56,6 +56,23 @@ wrangler secret put GEMINI_API_KEY
 # Paste your Gemini key when prompted — it is encrypted and never visible again
 ```
 
+#### (Optional) Add more free providers
+
+The app can switch between providers from the model dropdown — handy when one provider's daily quota runs out, since **each provider has its own independent free quota**. Add only the ones you want:
+
+```bash
+# Groq — free, ultra-fast Llama        https://console.groq.com/keys
+wrangler secret put GROQ_API_KEY
+
+# GitHub Models — free GPT-4o, etc.    https://github.com/settings/tokens  (scope: models:read)
+wrangler secret put GITHUB_MODELS_TOKEN
+
+# OpenRouter — free community models   https://openrouter.ai/keys
+wrangler secret put OPENROUTER_API_KEY
+```
+
+Any model whose provider key you haven't set will simply return a clear "no key configured" message — the others keep working.
+
 Finally, open `worker.js` and update the `ALLOWED_ORIGIN` constant to your GitHub Pages URL (see Step 4 for that URL), then re-deploy:
 ```bash
 wrangler deploy
@@ -109,11 +126,24 @@ Copy this URL and paste it into `ALLOWED_ORIGIN` in `worker.js`, then re-run `wr
 
 ## Models
 
-| Model | Description |
-|---|---|
-| `gemini-2.5-flash` | Best free balance of quality + speed — recommended for most tasks |
-| `gemini-2.5-flash-lite` | Fastest, highest free rate limits — great for quick chats |
-| `gemini-2.0-flash-exp` | Older experimental Flash — very fast |
+All models are **free, no credit card**. Switch anytime from the Settings model dropdown.
+
+| Provider | Models | Notes |
+|---|---|---|
+| **Google Gemini** | `gemini-2.5-flash`, `-flash-lite`, `-2.0-flash-exp` | Best all-around free tier (~1,500/day). Recommended. |
+| **Groq** | `llama-3.3-70b-versatile`, `llama-3.1-8b-instant` | Fastest inference on the planet |
+| **GitHub Models** | `gpt-4o`, `gpt-4o-mini`, `DeepSeek-R1` | Free **GPT-4o** using a GitHub token (see below) |
+| **OpenRouter** | `llama-3.3-70b-instruct:free`, `deepseek-r1:free` | Rotating free community models |
+
+### About GitHub Copilot
+
+GitHub **Copilot has no public, general-purpose chat API** you can call from your own app — its endpoints are gated to the Copilot editor product, and the "extract the Copilot token" hacks **violate GitHub's Terms of Service**, so this app does not use them.
+
+The sanctioned free equivalent is **GitHub Models**, included above: it gives you **GPT-4o, Llama, DeepSeek-R1 and more for free** using a normal GitHub Personal Access Token with the `models:read` scope. That's the legitimate way to get OpenAI-class models through your GitHub account.
+
+### Daily usage meter
+
+Click the **activity icon** in the sidebar to see today's request count per provider with progress bars (resets at midnight). Since free tiers don't expose a live quota API, these counts are tracked **locally in your browser** from the requests this app makes — an accurate estimate of *your* usage against each provider's free daily limit.
 
 ## File structure
 
