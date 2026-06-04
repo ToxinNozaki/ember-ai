@@ -13,9 +13,7 @@ compatibility_date = "2024-09-01"
 [ai]
 binding = "AI"
 
-# ── Rate limiting (optional). Create the namespace, then paste its id below:
-#     wrangler kv namespace create EMBER_RL
-#   Then uncomment and fill in the id. Without this, rate limiting is skipped.
-# [[kv_namespaces]]
-# binding = "RL"
-# id      = "PASTE_NAMESPACE_ID_HERE"
+# ── Rate limiting (per-IP/day) via Cloudflare KV ──
+[[kv_namespaces]]
+binding = "RL"
+id      = "d41cb2a5c4774aa296d1dcd30dffdabb"
