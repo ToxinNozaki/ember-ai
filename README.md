@@ -104,16 +104,48 @@ Copy this URL and paste it into `ALLOWED_ORIGIN` in `worker.js`, then re-run `wr
 ### Step 5 — Configure the app
 
 1. Open your site: `https://YOUR_USERNAME.github.io/YOUR_REPO/`
-2. Click the **gear icon** (bottom-left) to open Settings.
-3. Paste your **Cloudflare Worker URL** into the field.
-4. Click **Test Connection** — you should see "✓ Connected successfully!"
-5. Start chatting.
+2. The **Worker URL is pre-filled** with the one baked into `app.js` (`DEFAULT_WORKER_URL`). If you deployed your own Worker, open it in **Settings → Cloudflare Worker URL** and replace it, then update `DEFAULT_WORKER_URL` in `app.js` so it ships to everyone by default.
+3. Click **Test Connection** — you should see "✓ Connected successfully!"
+4. Start chatting.
+
+---
+
+## Sharing with friends
+
+Once `DEFAULT_WORKER_URL` in `app.js` points to your deployed Worker, **anyone who opens your GitHub Pages link can chat immediately** — no setup, no key entry. The Worker holds your keys server-side and only accepts requests from your Pages origin (`ALLOWED_ORIGIN`), so the keys are never exposed.
+
+A few things to know:
+
+- **Shared quota.** All friends draw on *your* providers' free daily limits. The model dropdown lets anyone switch providers (Gemini → Groq → GitHub Models → OpenRouter) when one runs out — each has its own quota, so adding all four roughly quadruples daily capacity.
+- **Abuse protection.** The Worker rejects requests whose browser `Origin` isn't your Pages site. This isn't bulletproof (Origin can be spoofed by non-browser clients), so don't post the Worker URL publicly. For a tighter setup you can add a shared passphrase check in `worker.js`.
+- **History is per-browser.** Each person's conversations live in their own `localStorage` — nobody sees anyone else's chats.
+
+---
+
+## Images (vision)
+
+Click the **paperclip** in the input bar to attach images (up to 6 per message). They're **downscaled in-browser** to ~1280px before sending — faster responses and smaller storage. Vision works only on multimodal models: **Gemini** (default) and **GPT-4o** via GitHub Models. If you attach an image while a text-only model (Llama, etc.) is selected, the app tells you to switch.
+
+> **Video is not supported.** The free OpenAI-compatible chat endpoints don't accept video input — that needs a separate (non-OpenAI-compatible) Gemini Files API integration, which is outside this app's zero-build, single-proxy design.
+
+## A note on "uncensored" mode
+
+This app does **not** include a switch to disable safety filtering or generate NSFW content, for two practical reasons:
+
+1. **It wouldn't work.** Content moderation runs on the **providers' servers** (Google, OpenAI/GitHub, Groq), not in this app — a frontend toggle can't turn it off.
+2. **It would get the keys banned.** Every provider's free tier prohibits such content; using the shared keys for it would trigger account bans and **break the app for everyone using it**.
+
+The system prompt is fully editable in **Settings** if you want to adjust tone/personality within the providers' allowed use.
 
 ---
 
 ## Features
 
 - **Streaming responses** — text appears token-by-token, just like Claude
+- **Image attachments** — paperclip to send images to vision models (Gemini / GPT-4o), auto-downscaled
+- **Multi-provider** — switch between Gemini, Groq, GitHub Models (GPT-4o), and OpenRouter free models
+- **Daily usage meter** — sidebar activity icon shows per-provider request counts vs free limits
+- **Zero-config sharing** — Worker URL baked in so friends just open the link
 - **Full markdown rendering** — bold, italics, tables, code blocks with syntax highlighting & copy button
 - **Conversation history** — stored in `localStorage`, grouped by date, searchable
 - **Editable titles** — click the conversation title to rename it inline

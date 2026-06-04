@@ -110,7 +110,9 @@ export default {
 };
 
 function isAllowed(origin) {
-  if (!origin) return true;
+  // The Worker URL is public (shared with friends), so require a matching
+  // browser Origin to reduce abuse of the shared API quota. Browsers always
+  // send Origin on cross-origin POSTs; missing/foreign origins are rejected.
   if (origin === ALLOWED_ORIGIN) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   return false;

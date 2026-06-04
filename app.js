@@ -11,6 +11,10 @@ const RENDER_TICK  = 50;   // ms between streaming re-renders
 const SLOW_TIMEOUT = 8000; // ms before "Still thinking…" appears
 const USAGE_KEY    = 'ember_usage';
 const DEFAULT_MODEL = 'gemini:gemini-2.5-flash';
+// Baked-in shared Worker URL so friends don't have to configure anything.
+// Users can still override it in Settings.
+const DEFAULT_WORKER_URL = 'https://ember-ai-proxy.voxbot.workers.dev';
+const MAX_IMAGE_DIM = 1280; // downscale attached images to this max edge (speed + storage)
 
 // Provider display names + approximate free daily request limits (for the local
 // usage estimate — providers don't expose live quota, so this counts requests
@@ -56,6 +60,7 @@ let slowTimer          = null;
 let streamBuf          = '';    // accumulated raw markdown during streaming
 let streamBubble       = null;  // the DOM element receiving streamed content
 let confirmCb          = null;  // callback for confirm modal
+let pendingImages      = [];    // data URLs of images attached to the next message
 
 // ── Settings helpers ────────────────────────────────────────
 
@@ -79,7 +84,13 @@ function persistConversations () {
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, MAX_CONVS);
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  } catch (e) {
+    // Likely storage quota (large images) — keep newest 20 convs and retry once
+    conversations = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 20);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations)); } catch {}
+  }
 }
 
 function makeConversation () {
@@ -97,6 +108,18 @@ function getActive () { return conversations.find(c => c.id === activeId); }
 function autoTitle (text) {
   const t = text.replace(/[*#_`~>\[\]]/g, '').trim();
   return t.length > 52 ? t.slice(0, 49) + '…' : t || 'New Conversation';
+}
+
+// Message content can be a plain string or an array of parts (text + images).
+function messageText (content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter(p => p.type === 'text').map(p => p.text).join(' ');
+  return '';
+}
+
+function messageImages (content) {
+  if (Array.isArray(content)) return content.filter(p => p.type === 'image_url').map(p => p.image_url.url);
+  return [];
 }
 
 // ── Time helpers ────────────────────────────────────────────
@@ -135,6 +158,11 @@ function providerOf (model) {
     if (PROVIDER_META[p]) return p;
   }
   return 'gemini';
+}
+
+function isVisionModel (model) {
+  const m = String(model || '');
+  return m.startsWith('gemini:') || m.includes('gpt-4o');
 }
 
 function todayKey () { return new Date().toISOString().slice(0, 10); }
@@ -457,7 +485,25 @@ function appendMsg (role, content, streaming) {
   bubble.className = 'msg-bubble';
 
   if (role === 'user') {
-    bubble.textContent = content;
+    const imgs = messageImages(content);
+    if (imgs.length) {
+      const strip = document.createElement('div');
+      strip.className = 'msg-images';
+      imgs.forEach((src, i) => {
+        const im = document.createElement('img');
+        im.src = src; im.className = 'msg-image'; im.loading = 'lazy';
+        im.alt = `attachment ${i + 1}`;
+        strip.appendChild(im);
+      });
+      bubble.appendChild(strip);
+    }
+    const txt = messageText(content);
+    if (txt) {
+      const t = document.createElement('div');
+      t.className = 'msg-text';
+      t.textContent = txt;
+      bubble.appendChild(t);
+    }
   } else if (streaming) {
     bubble.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
     streamBubble = bubble;
@@ -479,11 +525,30 @@ function scrollBottom (smooth = true) {
 
 // ── Streaming ───────────────────────────────────────────────
 
-async function sendMessage (content) {
-  if (isStreaming || !content.trim()) return;
+async function sendMessage (text) {
+  text = (text || '').trim();
+  if (isStreaming) return;
+  if (!text && !pendingImages.length) return;
 
-  const workerUrl = getSetting('workerUrl', '');
+  const workerUrl = getSetting('workerUrl', DEFAULT_WORKER_URL);
   if (!workerUrl) { promptWorkerUrl(); return; }
+
+  const model  = getSetting('model', DEFAULT_MODEL);
+  const images = pendingImages.slice();
+
+  // Vision guard — images only work on multimodal models (Gemini, GPT-4o)
+  if (images.length && !isVisionModel(model)) {
+    toast('Images need a vision model — switch to Gemini or GPT-4o in Settings.');
+    return;
+  }
+
+  // Message content: a plain string, or an array of parts when images attached
+  let msgContent = text;
+  if (images.length) {
+    msgContent = [];
+    if (text) msgContent.push({ type: 'text', text });
+    images.forEach(url => msgContent.push({ type: 'image_url', image_url: { url } }));
+  }
 
   // Ensure an active conversation
   if (!activeId) {
@@ -494,15 +559,19 @@ async function sendMessage (content) {
   const conv = getActive();
   if (!conv) return;
 
+  // Clear pending images now that we're committed to sending
+  pendingImages = [];
+  renderImagePreview();
+
   // Record user message
-  conv.messages.push({ role: 'user', content });
+  conv.messages.push({ role: 'user', content: msgContent });
   if (conv.messages.length === 1) {
-    conv.title = autoTitle(content);
+    conv.title = autoTitle(messageText(msgContent));
     setTitle(conv.title);
   }
   conv.updatedAt = Date.now();
 
-  appendMsg('user', content, false);
+  appendMsg('user', msgContent, false);
 
   // Clear input
   const inp = document.getElementById('message-input');
@@ -518,7 +587,7 @@ async function sendMessage (content) {
 
   // Build request body
   const payload = {
-    model:      getSetting('model',       DEFAULT_MODEL),
+    model:      model,
     messages:   [
       { role: 'system', content: getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT) },
       ...conv.messages,
@@ -717,8 +786,8 @@ function autoResize (el) {
 }
 
 function updateSendBtn () {
-  document.getElementById('send-btn').disabled =
-    !document.getElementById('message-input').value.trim();
+  const hasText = document.getElementById('message-input').value.trim();
+  document.getElementById('send-btn').disabled = !(hasText || pendingImages.length);
 }
 
 // ── Theme ───────────────────────────────────────────────────
@@ -755,7 +824,7 @@ function closeSettings () {
 
 function syncSettingsToUI () {
   const s = getSettings();
-  document.getElementById('worker-url').value  = s.workerUrl  || '';
+  document.getElementById('worker-url').value  = s.workerUrl  || DEFAULT_WORKER_URL;
   document.getElementById('model-select').value = s.model     || DEFAULT_MODEL;
   document.getElementById('sys-prompt').value   = s.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 
@@ -864,7 +933,11 @@ function copyConversation () {
   const conv = getActive();
   if (!conv) return;
   const md = conv.messages
-    .map(m => `**${m.role === 'user' ? 'You' : 'Ember'}:**\n\n${m.content}`)
+    .map(m => {
+      const imgs = messageImages(m.content);
+      const tag  = imgs.length ? ` _(+${imgs.length} image${imgs.length > 1 ? 's' : ''})_` : '';
+      return `**${m.role === 'user' ? 'You' : 'Ember'}:**${tag}\n\n${messageText(m.content)}`;
+    })
     .join('\n\n---\n\n');
   navigator.clipboard.writeText(md).then(() => {
     const btn  = document.getElementById('copy-convo-btn');
@@ -901,13 +974,76 @@ function bindSuggestions () {
   });
 }
 
+// ── Attachments + toast ─────────────────────────────────────
+
+function fileToDataURL (file, maxDim = MAX_IMAGE_DIM) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const s = Math.min(maxDim / width, maxDim / height);
+        width  = Math.round(width  * s);
+        height = Math.round(height * s);
+      }
+      const c = document.createElement('canvas');
+      c.width = width; c.height = height;
+      c.getContext('2d').drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src = url;
+  });
+}
+
+async function addImages (fileList) {
+  const files = [...fileList].filter(f => f.type.startsWith('image/'));
+  for (const f of files) {
+    if (pendingImages.length >= 6) { toast('Up to 6 images per message.'); break; }
+    try { pendingImages.push(await fileToDataURL(f)); } catch { toast('Skipped an unreadable image.'); }
+  }
+  renderImagePreview();
+  updateSendBtn();
+}
+
+function renderImagePreview () {
+  const strip = document.getElementById('image-preview');
+  if (!strip) return;
+  strip.innerHTML = '';
+  strip.classList.toggle('visible', pendingImages.length > 0);
+  pendingImages.forEach((src, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'preview-thumb';
+    thumb.innerHTML = `<img src="${src}" alt="attachment ${i + 1}">
+      <button class="preview-remove" data-i="${i}" aria-label="Remove image">&times;</button>`;
+    strip.appendChild(thumb);
+  });
+}
+
+let toastTimer = null;
+function toast (msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.className = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
 // ── Send handler ────────────────────────────────────────────
 
 function handleSend () {
   if (isStreaming) return;
   const inp = document.getElementById('message-input');
   const txt = inp.value.trim();
-  if (!txt) return;
+  if (!txt && !pendingImages.length) return;
   sendMessage(txt);
 }
 
@@ -955,6 +1091,21 @@ function init () {
   document.getElementById('send-btn').addEventListener('click', handleSend);
   document.getElementById('stop-btn').addEventListener('click', () => abortCtrl?.abort());
   document.getElementById('new-chat-btn').addEventListener('click', newChat);
+
+  // ── Image attachments ──
+  const fileInput = document.getElementById('file-input');
+  document.getElementById('attach-btn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async e => {
+    await addImages(e.target.files);
+    fileInput.value = '';
+  });
+  document.getElementById('image-preview').addEventListener('click', e => {
+    const btn = e.target.closest('.preview-remove');
+    if (!btn) return;
+    pendingImages.splice(Number(btn.dataset.i), 1);
+    renderImagePreview();
+    updateSendBtn();
+  });
 
   // ── Search ──
   document.getElementById('search-input').addEventListener('input', e => {
