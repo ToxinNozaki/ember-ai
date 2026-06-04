@@ -1,17 +1,28 @@
 /**
  * Ember AI — Cloudflare Worker Proxy
  *
+ * Provider: Google Gemini (free tier — no credit card, ~1,500 requests/day).
+ * Uses Gemini's OpenAI-compatible endpoint, so the frontend needs no changes.
+ *
+ * Get a free key at: https://aistudio.google.com/apikey
+ *
  * Deploy steps:
  *   npm i -g wrangler
  *   wrangler login
- *   wrangler secret put DEEPSEEK_API_KEY   ← paste your DeepSeek key (stored encrypted)
+ *   wrangler secret put GEMINI_API_KEY     ← paste your Google AI Studio key (stored encrypted)
  *   wrangler deploy
  *
  * Update ALLOWED_ORIGIN below to match your GitHub Pages URL before deploying.
+ *
+ * ── Want a different free provider? Just change UPSTREAM_API + the env key name: ──
+ *   Groq    : https://api.groq.com/openai/v1/chat/completions          (models: llama-3.3-70b-versatile)
+ *   OpenRouter: https://openrouter.ai/api/v1/chat/completions          (models: *:free variants)
+ *   Cerebras: https://api.cerebras.ai/v1/chat/completions              (models: llama-3.3-70b)
+ *   DeepSeek: https://api.deepseek.com/v1/chat/completions             (paid)
  */
 
-const ALLOWED_ORIGIN  = 'https://toxinnozaki.github.io'; // GitHub Pages origin (scheme+host only, no path)
-const DEEPSEEK_API    = 'https://api.deepseek.com/v1/chat/completions';
+const ALLOWED_ORIGIN = 'https://toxinnozaki.github.io'; // GitHub Pages origin (scheme+host only, no path)
+const UPSTREAM_API   = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
 export default {
   async fetch(request, env) {
@@ -40,13 +51,13 @@ export default {
       return new Response('Invalid JSON body', { status: 400 });
     }
 
-    // ── Forward to DeepSeek ──
+    // ── Forward to upstream provider ──
     let upstream;
     try {
-      upstream = await fetch(DEEPSEEK_API, {
+      upstream = await fetch(UPSTREAM_API, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
+          'Authorization': `Bearer ${env.GEMINI_API_KEY}`,
           'Content-Type':  'application/json',
         },
         body: JSON.stringify(body),
@@ -63,8 +74,8 @@ export default {
       return new Response(upstream.body, {
         status: upstream.status,
         headers: {
-          'Content-Type':     'text/event-stream',
-          'Cache-Control':    'no-cache',
+          'Content-Type':      'text/event-stream',
+          'Cache-Control':     'no-cache',
           'X-Accel-Buffering': 'no',
           ...corsHeaders(origin),
         },

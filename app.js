@@ -441,7 +441,7 @@ async function sendMessage (content) {
 
   // Build request body
   const payload = {
-    model:      getSetting('model',       'deepseek-chat'),
+    model:      getSetting('model',       'gemini-2.5-flash'),
     messages:   [
       { role: 'system', content: getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT) },
       ...conv.messages,
@@ -474,7 +474,7 @@ async function sendMessage (content) {
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
       const msg = resp.status === 429
-        ? 'DeepSeek is busy right now. Please wait a moment and try again.'
+        ? 'The model is rate-limited right now. Please wait a moment and try again.'
         : `API error ${resp.status}: ${txt || 'Unknown error'}`;
       showError(streamBubble, msg, false);
       conv.messages.pop();
@@ -676,7 +676,7 @@ function closeSettings () {
 function syncSettingsToUI () {
   const s = getSettings();
   document.getElementById('worker-url').value  = s.workerUrl  || '';
-  document.getElementById('model-select').value = s.model     || 'deepseek-chat';
+  document.getElementById('model-select').value = s.model     || 'gemini-2.5-flash';
   document.getElementById('sys-prompt').value   = s.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 
   const temp = s.temperature ?? 0.7;
@@ -716,7 +716,7 @@ async function testConnection () {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
-        model:      'deepseek-chat',
+        model:      'gemini-2.5-flash',
         messages:   [{ role: 'user', content: 'Hi' }],
         max_tokens: 5,
         stream:     false,

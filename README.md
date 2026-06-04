@@ -1,6 +1,6 @@
 # Ember AI
 
-A free, cloud-hosted AI chat app powered by the **DeepSeek API** with a Claude-inspired UI. No server costs, no local hardware — runs entirely on GitHub Pages + Cloudflare Workers free tiers.
+A **100% free**, cloud-hosted AI chat app powered by **Google Gemini** with a Claude-inspired UI. No server costs, no local hardware, **no credit card** — runs entirely on GitHub Pages + Cloudflare Workers + Google AI Studio free tiers.
 
 ---
 
@@ -10,17 +10,19 @@ A free, cloud-hosted AI chat app powered by the **DeepSeek API** with a Claude-i
 |---|---|---|
 | **Frontend** | Static HTML/CSS/JS on GitHub Pages | Free |
 | **API Proxy** | Cloudflare Worker (hides your API key) | Free — 100k req/day |
-| **AI Model** | DeepSeek V3 via `deepseek-chat` | Free — 5M tokens on signup |
+| **AI Model** | Google Gemini 2.5 Flash | Free — ~1,500 requests/day, no credit card |
+
+> Gemini uses an **OpenAI-compatible** endpoint, so the frontend code is provider-agnostic. To switch providers (Groq, OpenRouter, Cerebras, DeepSeek…), change `UPSTREAM_API` and the env key name in `worker.js` — see the comments at the top of that file.
 
 ---
 
 ## Setup (15 minutes total)
 
-### Step 1 — Get a DeepSeek API key
+### Step 1 — Get a free Gemini API key
 
-1. Go to [platform.deepseek.com](https://platform.deepseek.com) and sign up.
-2. Navigate to **API Keys** → **Create new key**.
-3. Copy it — you won't see it again.
+1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and sign in with a Google account.
+2. Click **Create API key** (no credit card required).
+3. Copy it.
 
 ---
 
@@ -50,8 +52,8 @@ https://ember-ai-proxy.YOUR-SUBDOMAIN.workers.dev
 
 Now store your API key as an encrypted secret:
 ```bash
-wrangler secret put DEEPSEEK_API_KEY
-# Paste your DeepSeek key when prompted — it is encrypted and never visible again
+wrangler secret put GEMINI_API_KEY
+# Paste your Gemini key when prompted — it is encrypted and never visible again
 ```
 
 Finally, open `worker.js` and update the `ALLOWED_ORIGIN` constant to your GitHub Pages URL (see Step 4 for that URL), then re-deploy:
@@ -109,8 +111,9 @@ Copy this URL and paste it into `ALLOWED_ORIGIN` in `worker.js`, then re-run `wr
 
 | Model | Description |
 |---|---|
-| `deepseek-chat` | DeepSeek V3 — fast, high quality, best for most tasks |
-| `deepseek-reasoner` | DeepSeek R1 — extended chain-of-thought reasoning, slower |
+| `gemini-2.5-flash` | Best free balance of quality + speed — recommended for most tasks |
+| `gemini-2.5-flash-lite` | Fastest, highest free rate limits — great for quick chats |
+| `gemini-2.0-flash-exp` | Older experimental Flash — very fast |
 
 ## File structure
 
@@ -141,4 +144,4 @@ The Cloudflare Worker already allows `localhost` and `127.0.0.1` origins, so loc
 
 ## Privacy
 
-All conversation history is stored **only in your browser's localStorage** — nothing is sent to any server except the messages you explicitly send to the AI. Your DeepSeek API key is stored **only inside Cloudflare's encrypted secrets** and is never visible after you set it.
+All conversation history is stored **only in your browser's localStorage** — nothing is sent to any server except the messages you explicitly send to the AI. Your Gemini API key is stored **only inside Cloudflare's encrypted secrets** and is never visible after you set it.
