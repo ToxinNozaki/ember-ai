@@ -971,6 +971,13 @@ textarea { resize: none; }
 
 .btn-row { display: flex; gap: 9px; flex-wrap: wrap; }
 
+.field-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 9px;
+}
+
 /* Dropdown optgroups */
 .form-group select optgroup {
   font-weight: 700;
