@@ -9,6 +9,18 @@ const SETTINGS_KEY = 'ember_settings';
 const MAX_CONVS    = 100;
 const RENDER_TICK  = 50;   // ms between streaming re-renders
 const SLOW_TIMEOUT = 8000; // ms before "Still thinking…" appears
+const USAGE_KEY    = 'ember_usage';
+const DEFAULT_MODEL = 'gemini:gemini-2.5-flash';
+
+// Provider display names + approximate free daily request limits (for the local
+// usage estimate — providers don't expose live quota, so this counts requests
+// this browser made today). Limits are ballpark and easy to tweak.
+const PROVIDER_META = {
+  gemini:     { name: 'Google Gemini', limit: 1500 },
+  groq:       { name: 'Groq',          limit: 1000 },
+  github:     { name: 'GitHub Models',  limit: 150 },
+  openrouter: { name: 'OpenRouter',     limit: 200 },
+};
 
 const DEFAULT_SYSTEM_PROMPT =
 `You are Ember, a knowledgeable, thoughtful, and friendly AI assistant. You communicate clearly and precisely.
@@ -112,6 +124,71 @@ function groupByDate (list) {
     else                    acc.older.push(c);
     return acc;
   }, { today: [], yesterday: [], week: [], older: [] });
+}
+
+// ── Usage tracking ──────────────────────────────────────────
+
+function providerOf (model) {
+  const sep = String(model || '').indexOf(':');
+  if (sep > 0) {
+    const p = model.slice(0, sep);
+    if (PROVIDER_META[p]) return p;
+  }
+  return 'gemini';
+}
+
+function todayKey () { return new Date().toISOString().slice(0, 10); }
+
+function getUsage () {
+  let u;
+  try { u = JSON.parse(localStorage.getItem(USAGE_KEY) || '{}'); } catch { u = {}; }
+  if (u.date !== todayKey()) u = { date: todayKey(), counts: {} };
+  if (!u.counts) u.counts = {};
+  return u;
+}
+
+function bumpUsage (provider) {
+  const u = getUsage();
+  u.counts[provider] = (u.counts[provider] || 0) + 1;
+  localStorage.setItem(USAGE_KEY, JSON.stringify(u));
+  renderUsage();
+}
+
+function msUntilMidnight () {
+  const mid = new Date();
+  mid.setHours(24, 0, 0, 0);
+  return mid - Date.now();
+}
+
+function renderUsage () {
+  const reset = document.getElementById('usage-reset');
+  const body  = document.getElementById('usage-pop-body');
+  if (!body) return;
+
+  const ms = msUntilMidnight();
+  const h  = Math.floor(ms / 3600000);
+  const m  = Math.floor((ms % 3600000) / 60000);
+  reset.textContent = `resets in ${h}h ${m}m`;
+
+  const u      = getUsage();
+  const active = providerOf(getSetting('model', DEFAULT_MODEL));
+
+  body.innerHTML = '';
+  for (const [key, meta] of Object.entries(PROVIDER_META)) {
+    const used = u.counts[key] || 0;
+    const pct  = Math.min(100, Math.round((used / meta.limit) * 100));
+    const fill = pct >= 100 ? 'full' : pct >= 80 ? 'warn' : '';
+
+    const row = document.createElement('div');
+    row.className = 'usage-row' + (key === active ? ' active' : '');
+    row.innerHTML = `
+      <div class="usage-row-top">
+        <span class="usage-row-name">${meta.name}${key === active ? ' · active' : ''}</span>
+        <span class="usage-row-count">${used} / ${meta.limit}</span>
+      </div>
+      <div class="usage-bar"><div class="usage-bar-fill ${fill}" style="width:${pct}%"></div></div>`;
+    body.appendChild(row);
+  }
 }
 
 // ── Sidebar rendering ───────────────────────────────────────
@@ -441,7 +518,7 @@ async function sendMessage (content) {
 
   // Build request body
   const payload = {
-    model:      getSetting('model',       'gemini-2.5-flash'),
+    model:      getSetting('model',       DEFAULT_MODEL),
     messages:   [
       { role: 'system', content: getSetting('systemPrompt', DEFAULT_SYSTEM_PROMPT) },
       ...conv.messages,
@@ -470,6 +547,9 @@ async function sendMessage (content) {
       body:    JSON.stringify(payload),
       signal:  abortCtrl.signal,
     });
+
+    // Count this request against the active provider's daily quota estimate
+    bumpUsage(providerOf(payload.model));
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
@@ -676,7 +756,7 @@ function closeSettings () {
 function syncSettingsToUI () {
   const s = getSettings();
   document.getElementById('worker-url').value  = s.workerUrl  || '';
-  document.getElementById('model-select').value = s.model     || 'gemini-2.5-flash';
+  document.getElementById('model-select').value = s.model     || DEFAULT_MODEL;
   document.getElementById('sys-prompt').value   = s.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 
   const temp = s.temperature ?? 0.7;
@@ -716,7 +796,7 @@ async function testConnection () {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
-        model:      'gemini-2.5-flash',
+        model:      document.getElementById('model-select').value || DEFAULT_MODEL,
         messages:   [{ role: 'user', content: 'Hi' }],
         max_tokens: 5,
         stream:     false,
@@ -848,6 +928,11 @@ function setupScrollBtn () {
 function init () {
   loadConversations();
 
+  // Migrate any pre-existing bare model id (e.g. "gemini-2.5-flash") to the
+  // new "provider:model" format so routing + usage work.
+  const savedModel = getSetting('model', null);
+  if (savedModel && !savedModel.includes(':')) setSetting('model', 'gemini:' + savedModel);
+
   // Apply saved theme
   applyTheme(getSetting('theme', 'dark'));
 
@@ -911,6 +996,8 @@ function init () {
   ['worker-url', 'model-select', 'sys-prompt'].forEach(id => {
     document.getElementById(id).addEventListener('change', saveSettingsFromUI);
   });
+  // Model change also updates which provider is highlighted as "active" in usage
+  document.getElementById('model-select').addEventListener('change', renderUsage);
 
   // Sliders — live display + save on change
   document.getElementById('temp-slider').addEventListener('input', e => {
@@ -981,16 +1068,35 @@ function init () {
   // ── Scroll button ──
   setupScrollBtn();
 
+  // ── Usage popover ──
+  const usageBtn = document.getElementById('usage-btn');
+  const usagePop = document.getElementById('usage-popover');
+  usageBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = usagePop.classList.toggle('open');
+    if (open) renderUsage();
+  });
+  document.addEventListener('click', e => {
+    if (usagePop.classList.contains('open') &&
+        !usagePop.contains(e.target) && !usageBtn.contains(e.target)) {
+      usagePop.classList.remove('open');
+    }
+  });
+  renderUsage();
+
   // ── Keyboard shortcuts ──
   document.addEventListener('keydown', e => {
     const mod = e.metaKey || e.ctrlKey;
-    if (e.key === 'Escape') { closeSettings(); closeConfirm(); closeMobileSidebar(); }
+    if (e.key === 'Escape') {
+      closeSettings(); closeConfirm(); closeMobileSidebar();
+      usagePop.classList.remove('open');
+    }
     if (mod && e.key === 'n') { e.preventDefault(); newChat(); }
     if (mod && e.key === 'k') { e.preventDefault(); document.getElementById('search-input').focus(); }
   });
 
-  // Refresh relative times every 60 s
-  setInterval(() => renderSidebar(), 60000);
+  // Refresh relative times + usage countdown every 60 s
+  setInterval(() => { renderSidebar(); if (usagePop.classList.contains('open')) renderUsage(); }, 60000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
